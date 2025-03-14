@@ -1,102 +1,141 @@
-import numpy as np
+# Import necessary modules
+from fuzzy import FermateanFuzzySet, FFLDWA
+from rules import BOGReleaseRules
+from data_gathering import DataGatheringModule
+import argparse
 
-# Fermatean Fuzzy Set Class
-class FermateanFuzzySet:
-    def __init__(self, mu, nu):
-        """
-        Initialize a Fermatean Fuzzy Set with membership (mu) and non-membership (nu) values.
-        """
-        if mu**3 + nu**3 > 1:
-            raise ValueError("Invalid Fermatean Fuzzy Set: mu^3 + nu^3 must be <= 1")
-        self.mu = mu
-        self.nu = nu
 
-    def score(self):
-        """
-        Calculate the score function for defuzzification.
-        """
-        return (self.mu**3 + 1 - self.nu**3) / 2
-
-# Fermatean Fuzzy Linguistic Dombi Weighted Average (FFLDWA)
-def FFLDWA(expert_weights, expert_opinions):
-    """
-    Aggregate expert opinions using the FFLDWA method.
-    :param expert_weights: List of weights for each expert.
-    :param expert_opinions: List of FermateanFuzzySet objects representing expert opinions.
-    :return: Aggregated FermateanFuzzySet.
-    """
-    if len(expert_weights) != len(expert_opinions):
-        raise ValueError("Number of expert weights must match number of expert opinions.")
-
-    # Dombi aggregation parameters
-    C = 3  # Comparative coefficient
-    rho = 1.38  # Linguistic scale parameter
-
-    # Aggregate membership and non-membership values
-    aggregated_mu = 0
-    aggregated_nu = 0
-
-    for weight, opinion in zip(expert_weights, expert_opinions):
-        # Calculate weighted membership and non-membership
-        weighted_mu = weight * (opinion.mu**3 / (1 - opinion.mu**3))**C
-        weighted_nu = weight * ((1 - opinion.nu) / opinion.nu)**C
-
-        aggregated_mu += weighted_mu
-        aggregated_nu += weighted_nu
-
-    # Final aggregation
-    aggregated_mu = 1 / (1 + aggregated_mu**(1/C))
-    aggregated_nu = 1 / (1 + aggregated_nu**(1/C))
-
-    return FermateanFuzzySet(aggregated_mu, aggregated_nu)
-
-# Fermatean Fuzzy Stepwise Weight Assessment Ratio Analysis (FF-SWARA)
-def FF_SWARA(criteria_scores):
-    """
-    Determine weights for criteria using the FF-SWARA method.
-    :param criteria_scores: List of score function values for each criterion.
-    :return: List of weights for each criterion.
-    """
-    # Sort criteria in descending order of scores
-    sorted_indices = np.argsort(criteria_scores)[::-1]
-    sorted_scores = np.array(criteria_scores)[sorted_indices]
-
-    # Calculate comparative significance and coefficients
-    c = [0]  # Comparative significance
-    k = [1]  # Comparative coefficient
-    q = [1]  # Recalculated weight
-
-    for i in range(1, len(sorted_scores)):
-        c_i = sorted_scores[i - 1] - sorted_scores[i]
-        c.append(c_i)
-        k_i = c_i + 1
-        k.append(k_i)
-        q_i = q[i - 1] / k_i
-        q.append(q_i)
-
-    # Calculate final weights
-    total_q = sum(q)
-    weights = [q_i / total_q for q_i in q]
-
-    return weights
-
-# Example Usage
-if __name__ == "__main__":
-    # Define expert weights and opinions
-    expert_weights = [0.376, 0.289, 0.177, 0.157]  # Example weights
-    expert_opinions = [
-        FermateanFuzzySet(0.760, 0.299),  # Expert 1
-        FermateanFuzzySet(0.587, 0.488),  # Expert 2
-        FermateanFuzzySet(0.343, 0.721),  # Expert 3
-        FermateanFuzzySet(0.299, 0.760),  # Expert 4
+def rules_with_fuzzy():
+    expert1 = [
+        FermateanFuzzySet(mu=0.9, nu=0.1),  # Population Density
+        FermateanFuzzySet(mu=0.8, nu=0.2),  # Road Type
+        FermateanFuzzySet(mu=0.7, nu=0.3),  # Weather
+        FermateanFuzzySet(mu=0.6, nu=0.4),  # Driving Time
+        FermateanFuzzySet(mu=0.5, nu=0.5)   # Site Type
+    ]
+    expert2 = [
+        FermateanFuzzySet(mu=0.85, nu=0.15),
+        FermateanFuzzySet(mu=0.75, nu=0.25),
+        FermateanFuzzySet(mu=0.65, nu=0.35),
+        FermateanFuzzySet(mu=0.55, nu=0.45),
+        FermateanFuzzySet(mu=0.45, nu=0.55)
+    ]
+    expert3 = [
+        FermateanFuzzySet(mu=0.95, nu=0.05),
+        FermateanFuzzySet(mu=0.85, nu=0.15),
+        FermateanFuzzySet(mu=0.75, nu=0.25),
+        FermateanFuzzySet(mu=0.65, nu=0.35),
+        FermateanFuzzySet(mu=0.55, nu=0.45)
+    ]
+    expert4 = [
+        FermateanFuzzySet(mu=0.9, nu=0.1),
+        FermateanFuzzySet(mu=0.8, nu=0.2),
+        FermateanFuzzySet(mu=0.7, nu=0.3),
+        FermateanFuzzySet(mu=0.6, nu=0.4),
+        FermateanFuzzySet(mu=0.5, nu=0.5)
     ]
 
-    # Aggregate expert opinions using FFLDWA
-    aggregated_opinion = FFLDWA(expert_weights, expert_opinions)
-    print(f"Aggregated Opinion (mu, nu): ({aggregated_opinion.mu:.3f}, {aggregated_opinion.nu:.3f})")
-    print(f"Score: {aggregated_opinion.score():.3f}")
+    # Step 2: Define expert weights from the article
+    expert_weights = [0.376, 0.289, 0.177, 0.157]  # Expert 1, Expert 2, Expert 3, Expert 4
 
-    # Define criteria scores for FF-SWARA
-    criteria_scores = [1.547, 1.010, 0.758, 0.752, 1.305]  # Example scores
-    criteria_weights = FF_SWARA(criteria_scores)
-    print("Criteria Weights:", [f"{w:.3f}" for w in criteria_weights])
+    # Step 3: Initialize FFLDWA operator
+    ffldwa = FFLDWA(c=3)
+
+    # Step 4: Aggregate expert evaluations for each criterion
+    aggregated_criteria = []
+    for i in range(5):  # 5 criteria
+        aggregated_criteria.append(ffldwa.aggregate(
+            [expert1[i], expert2[i], expert3[i], expert4[i]],  # Expert evaluations for criterion i
+            expert_weights  # Expert weights
+        ))
+
+    # Step 5: Initialize BOG release rules
+    bog_rules = BOGReleaseRules()
+
+    # Step 6: Evaluate release conditions
+    tank_pressure = 0.65  # Example tank pressure (MPa)
+    should_release, reason = bog_rules.evaluate_release_conditions(tank_pressure, aggregated_criteria)
+
+    # Step 7: Output results
+    print("Aggregated Fermatean Fuzzy Sets for each criterion:")
+    for i, ffs in enumerate(aggregated_criteria):
+        print(f"Criterion {i+1}: {ffs} (Score: {ffs.score():.4f})")
+
+    print(f"\nShould release BOG: {should_release}, Reason: {reason}")
+
+
+def rule_with_fuzzy_and_received_data():
+    data_gatherer = DataGatheringModule()
+    ffldwa = FFLDWA(c=3)
+    bog_rules = BOGReleaseRules()
+
+    # Example location (latitude and longitude)
+    latitude = 34.0522  # Example: Los Angeles
+    longitude = -118.2437
+
+    # Step 1: Gather data
+    population_density = data_gatherer.get_population_density(latitude, longitude)
+    road_type = data_gatherer.get_road_type(latitude, longitude)
+    weather_condition = data_gatherer.get_weather_condition(latitude, longitude)
+    driving_time = data_gatherer.get_driving_time()
+    site_type = data_gatherer.get_site_type(latitude, longitude)
+
+    # Step 2: Map gathered data to Fermatean Fuzzy Sets
+    # Example mapping rules (adjust based on your specific requirements)
+    ffs_population = FermateanFuzzySet(
+        mu=min(population_density / 5000, 1),  # Normalize population density (max 5000 people/km²)
+        nu=0.1  # Non-membership degree (example value)
+    )
+    ffs_road = FermateanFuzzySet(
+        mu=0.9 if road_type == "expressway" else 0.5,  # Higher membership for expressways
+        nu=0.2  # Non-membership degree (example value)
+    )
+    ffs_weather = FermateanFuzzySet(
+        mu=0.9 if weather_condition == "sunny" else 0.5,  # Higher membership for sunny weather
+        nu=0.1  # Non-membership degree (example value)
+    )
+    ffs_time = FermateanFuzzySet(
+        mu=0.8 if driving_time == "daytime" else 0.3,  # Higher membership for daytime
+        nu=0.2  # Non-membership degree (example value)
+    )
+    ffs_site = FermateanFuzzySet(
+        mu=0.9 if site_type == "urban" else 0.5,  # Higher membership for urban areas
+        nu=0.2  # Non-membership degree (example value)
+    )
+
+    # Step 3: Aggregate criteria using FFLDWA
+    aggregated_criteria = [ffs_population, ffs_road, ffs_weather, ffs_time, ffs_site]
+    weights = [0.2, 0.2, 0.2, 0.2, 0.2]  # Equal weights for simplicity
+    overall_risk = ffldwa.aggregate(aggregated_criteria, weights)
+
+    # Step 4: Evaluate BOG release conditions
+    tank_pressure = 0.65  # Example tank pressure (MPa)
+    should_release, reason = bog_rules.evaluate_release_conditions(tank_pressure, aggregated_criteria)
+
+    # Step 5: Output results
+    print("Gathered Data:")
+    print(f"Population Density: {population_density} people/km²")
+    print(f"Road Type: {road_type}")
+    print(f"Weather Condition: {weather_condition}")
+    print(f"Driving Time: {driving_time}")
+    print(f"Site Type: {site_type}")
+
+    print("\nAggregated Fermatean Fuzzy Sets for each criterion:")
+    for i, ffs in enumerate(aggregated_criteria):
+        print(f"Criterion {i+1}: {ffs} (Score: {ffs.score():.4f})")
+
+    print(f"\nOverall Risk Score: {overall_risk.score():.4f}")
+    print(f"Should release BOG: {should_release}, Reason: {reason}")
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Run fuzzy evaluation modules.")
+    parser.add_argument('--mode', choices=['experts', 'data'], default='experts',
+                        help="Choose 'experts' to run expert fuzzy rules or 'data' to run fuzzy and received data rules.")
+    args = parser.parse_args()
+
+    if args.mode == "data":
+        rule_with_fuzzy_and_received_data()
+    else:
+        rules_with_fuzzy()
