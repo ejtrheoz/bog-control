@@ -1,6 +1,12 @@
 import requests
 import numpy as np
 from datetime import datetime
+from dotenv import load_dotenv
+import os
+import pytz
+import pandas as pd
+
+load_dotenv()
 
 class DataGatheringModule:
     """
@@ -11,10 +17,10 @@ class DataGatheringModule:
         Initialize the data gathering module.
         """
         # API keys and endpoints (example values)
-        self.weather_api_key = "your_weather_api_key"
-        self.weather_api_url = "https://api.openweathermap.org/data/2.5/weather"
-        self.population_data_url = "https://example.com/population_data"
-        self.road_data_url = "https://example.com/road_data"
+        self.weather_api_key = os.environ["WEATHER_API_KEY"]
+        self.weather_api_url = "https://api.openweathermap.org/data/3.0/onecall"
+        self.population_data = pd.read_csv("population_density.csv")
+        self.google_maps_api_key = os.environ["GOOGLE_MAPS_API_KEY"]
 
     def get_population_density(self, latitude, longitude):
         """
@@ -24,29 +30,42 @@ class DataGatheringModule:
         :param longitude: Longitude of the location.
         :return: Population density (people per square kilometer).
         """
-        # Example: Fetch population density from an external API or dataset
-        response = requests.get(f"{self.population_data_url}?lat={latitude}&lon={longitude}")
-        if response.status_code == 200:
-            data = response.json()
-            return data.get("population_density", 0)  # Default to 0 if data is missing
-        else:
-            raise Exception(f"Failed to fetch population data: {response.status_code}")
+        
+        # Compute Euclidean distance between the query point and each row in the dataset
+        self.population_data["distance"] = ((self.population_data["Y"] - latitude)**2 + (self.population_data["X"] - longitude)**2)**0.5
+        
+        # Find the row with the smallest distance
+        closest_row = self.population_data.loc[self.population_data["distance"].idxmin()]
+        
+        return closest_row["Z"]
 
-    def get_road_type(self, latitude, longitude):
+    def get_road_type_google(self, latitude, longitude):
         """
-        Get the type of road for a given location.
+        Get road type using the Google Maps Geocoding API.
         
         :param latitude: Latitude of the location.
         :param longitude: Longitude of the location.
-        :return: Road type (e.g., "expressway", "main_road", "branch_road").
+        :return: List of types associated with the road.
         """
-        # Example: Fetch road type from an external API or dataset
-        response = requests.get(f"{self.road_data_url}?lat={latitude}&lon={longitude}")
+        url = "https://maps.googleapis.com/maps/api/geocode/json"
+        params = {
+            "latlng": f"{latitude},{longitude}",
+            "key": self.google_maps_api_key,
+            # You can restrict the result types if needed:
+            "result_type": "route"  
+        }
+        response = requests.get(url, params=params)
         if response.status_code == 200:
             data = response.json()
-            return data.get("road_type", "unknown")  # Default to "unknown" if data is missing
+            if data["results"]:
+                # The 'types' field gives types, e.g. ["route"] or ["highway"]
+                road_types = data["results"][0].get("types", [])
+                return road_types
+            else:
+                raise Exception("No results for the provided coordinates")
         else:
-            raise Exception(f"Failed to fetch road data: {response.status_code}")
+            raise Exception(f"Failed to fetch data: {response.status_code}")
+
 
     def get_weather_condition(self, latitude, longitude):
         """
@@ -76,7 +95,8 @@ class DataGatheringModule:
         
         :return: Time of day (e.g., "daytime", "nighttime", "rush_hour").
         """
-        now = datetime.now()
+        shanghai_tz = pytz.timezone("Asia/Shanghai")
+        now = datetime.now(shanghai_tz)
         hour = now.hour
 
         if 7 <= hour < 9 or 17 <= hour < 19:
@@ -86,25 +106,35 @@ class DataGatheringModule:
         else:
             return "nighttime"
 
-    def get_site_type(self, latitude, longitude):
+    def get_site_type_google(self, latitude, longitude):
         """
-        Get the site type (land use or terrain) for a given location.
+        Determine the site type using the Google Maps Geocoding API.
         
         :param latitude: Latitude of the location.
         :param longitude: Longitude of the location.
-        :return: Site type (e.g., "urban", "rural", "canyon").
+        :return: Inferred site type (e.g., "urban", "rural").
         """
-        # Example: Fetch site type from an external API or dataset
-        response = requests.get(f"{self.population_data_url}?lat={latitude}&lon={longitude}")
+        url = "https://maps.googleapis.com/maps/api/geocode/json"
+        params = {
+            "latlng": f"{latitude},{longitude}",
+            "key": self.google_maps_api_key,
+        }
+        response = requests.get(url, params=params)
         if response.status_code == 200:
             data = response.json()
-            population_density = data.get("population_density", 0)
-            if population_density > 1000:
-                return "urban"
-            elif population_density > 100:
-                return "suburban"
+            if data["results"]:
+                address_components = data["results"][0].get("address_components", [])
+                # You can inspect address_components to decide the site type.
+                # For example, if a 'locality' or 'sublocality' is found, you might infer an urban area.
+                types = []
+                for component in address_components:
+                    types.extend(component.get("types", []))
+                if "locality" in types or "sublocality" in types:
+                    return "urban"
+                else:
+                    return "rural"
             else:
-                return "rural"
+                raise Exception("No results for the provided coordinates")
         else:
             raise Exception(f"Failed to fetch site type data: {response.status_code}")
 
